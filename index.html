@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pengumuman Kelulusan Siswa Kelas 9</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Pengumuman Kelulusan Siswa Kelas 9</h1>
+        <p>Masukkan NISN Anda untuk mengetahui status kelulusan.</p>
+        <div class="form-group">
+            <label for="nisn">NISN:</label>
+            <input type="text" id="nisn" placeholder="Contoh: 1234567890" required>
+            <button onclick="cekKelulusan()">Cek Kelulusan</button>
+        </div>
+        <div id="hasil" class="hasil">
+            </div>
+        <div id="loading" class="loading">
+            Memuat data kelulusan...
+        </div>
+    </div>
+
+    <script>
+        // ID Spreadsheet dan GID (Sheet ID) dari URL Anda
+        const SPREADSHEET_ID = '1BOCN4Y-nZH6oO9GcJEu5VZeTgZPYRdXzUPPJ8E-Bw7o';
+        const SHEET_GID = '0'; // Biasanya 0 untuk sheet pertama
+
+        // URL untuk mengambil data sebagai JSON
+        // Pastikan spreadsheet Anda disetel ke "Anyone with the link can view"
+        const GOOGLE_SHEETS_API_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&tq&gid=${SHEET_GID}`;
+
+        let dataKelulusan = {}; // Objek untuk menyimpan data siswa, diindeks oleh NISN
+
+        // Fungsi untuk mengambil data dari Google Spreadsheet
+        async function fetchDataFromGoogleSheet() {
+            document.getElementById('loading').style.display = 'block'; // Tampilkan loading
+            try {
+                const response = await fetch(GOOGLE_SHEETS_API_URL);
+                const text = await response.text();
+
+                // Google Sheets API returns a JSONP-like response
+                // We need to parse it to get the actual JSON data
+                const jsonString = text.substring(text.indexOf("google.visualization.Query.setResponse(") + 39, text.lastIndexOf(");"));
+                const jsonData = JSON.parse(jsonString);
+
+                // Proses data dari Google Spreadsheet
+                const rows = jsonData.table.rows;
+                rows.forEach(row => {
+                    const columns = row.c;
+                    // Asumsi urutan kolom: NISN (col 0), Nama (col 1), Status (col 2), Keterangan (col 3)
+                    // Sesuaikan indeks jika urutan kolom di spreadsheet Anda berbeda
+                    const nisn = columns[0] && columns[0].v !== null ? String(columns[0].v).trim() : null;
+                    const nama = columns[1] && columns[1].v !== null ? String(columns[1].v).trim() : 'Nama Tidak Diketahui';
+                    const status = columns[2] && columns[2].v !== null ? String(columns[2].v).trim() : 'Tidak Diketahui';
+                    const keterangan = columns[3] && columns[3].v !== null ? String(columns[3].v).trim() : '';
+
+                    if (nisn) {
+                        dataKelulusan[nisn] = {
+                            nama: nama,
+                            status: status,
+                            keterangan: keterangan
+                        };
+                    }
+                });
+                console.log("Data kelulusan berhasil dimuat:", dataKelulusan);
+            } catch (error) {
+                console.error("Gagal memuat data dari Google Spreadsheet:", error);
+                document.getElementById('hasil').innerHTML = "<p class='error'>Gagal memuat data kelulusan. Pastikan spreadsheet publik dan format kolom sudah benar.</p>";
+                document.getElementById('hasil').className = 'hasil error';
+            } finally {
+                document.getElementById('loading').style.display = 'none'; // Sembunyikan loading
+            }
+        }
+
+        // Panggil fungsi untuk memuat data saat halaman dimuat
+        document.addEventListener('DOMContentLoaded', fetchDataFromGoogleSheet);
+
+
+        function cekKelulusan() {
+            const nisnInput = document.getElementById('nisn').value.trim();
+            const hasilDiv = document.getElementById('hasil');
+
+            if (Object.keys(dataKelulusan).length === 0) {
+                hasilDiv.innerHTML = "<p class='error'>Data kelulusan belum dimuat atau tidak tersedia. Coba lagi nanti.</p>";
+                hasilDiv.className = 'hasil error';
+                return;
+            }
+
+            if (nisnInput === "") {
+                hasilDiv.innerHTML = "<p class='error'>NISN tidak boleh kosong.</p>";
+                hasilDiv.className = 'hasil error';
+                return;
+            }
+
+            if (dataKelulusan[nisnInput]) {
+                const siswa = dataKelulusan[nisnInput];
+                let statusClass = siswa.status.toLowerCase() === "lulus" ? "lulus" : "tidak-lulus";
+                hasilDiv.innerHTML = `
+                    <h2>Status Kelulusan</h2>
+                    <p><strong>Nama:</strong> ${siswa.nama}</p>
+                    <p><strong>NISN:</strong> ${nisnInput}</p>
+                    <p class="${statusClass}"><strong>Status:</strong> ${siswa.status}</p>
+                    <p>${siswa.keterangan || 'Silakan hubungi pihak sekolah untuk informasi lebih lanjut.'}</p>
+                `;
+                hasilDiv.className = `hasil ${statusClass}`;
+            } else {
+                hasilDiv.innerHTML = "<p class='error'>NISN tidak ditemukan. Pastikan NISN yang Anda masukkan benar.</p>";
+                hasilDiv.className = 'hasil error';
+            }
+        }
+    </script>
+</body>
+</html>
